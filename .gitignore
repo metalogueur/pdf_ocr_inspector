@@ -1,0 +1,7 @@
+# Folders to ignore
+.idea/
+__pycache__/
+
+# Files to ignore
+test_dir/bad_files.txt
+setup.py
