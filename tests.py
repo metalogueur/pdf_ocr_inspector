@@ -1,9 +1,9 @@
 """Unit tests for PDF OCR Inspector."""
 
 # imports
-import logging
 import inspector
 import os
+import pandas as pd
 import unittest
 
 
@@ -23,28 +23,54 @@ class TestInspectorParser(unittest.TestCase):
         self.assertEqual(self.parser.script_version, self.script_version)
 
 
+class TestPDFFileList(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.test_dir = os.path.join(os.getcwd(), 'test_dir')
+        self.pdf_file_list = inspector.PDFFileList(self.test_dir)
+
+    def tearDown(self) -> None:
+        self.pdf_file_list = None
+
+    def test_file_list_instance(self):
+        self.assertIsInstance(self.pdf_file_list, inspector.PDFFileList)
+        self.assertIsInstance(self.pdf_file_list.file_names, list)
+        self.assertIsInstance(self.pdf_file_list.total_characters, list)
+        self.assertIsInstance(self.pdf_file_list.total_bad_characters, list)
+        self.assertIsInstance(self.pdf_file_list.percentage_bad_characters, list)
+        self.assertIsInstance(self.pdf_file_list.directory, str)
+        self.assertIsInstance(self.pdf_file_list.verbose, bool)
+
+    def test_file_names(self):
+        self.assertEqual(len(self.pdf_file_list.file_names), 3)
+        self.assertIn(os.path.join(self.test_dir, 'one.pdf'), self.pdf_file_list.file_names)
+        self.assertIn(os.path.join(self.test_dir, 'two.pdf'), self.pdf_file_list.file_names)
+        self.assertIn(os.path.join(self.test_dir, 'three.pdf'), self.pdf_file_list.file_names)
+        self.assertNotIn(os.path.join(self.test_dir, 'one.txt'), self.pdf_file_list.file_names)
+        self.assertNotIn(os.path.join(self.test_dir, 'two.txt'), self.pdf_file_list.file_names)
+        self.assertNotIn(os.path.join(self.test_dir, 'three.txt'), self.pdf_file_list.file_names)
+        self.assertNotIn(os.path.join(self.test_dir, 'bad_files.txt'), self.pdf_file_list.file_names)
+
+    def test_scan_files(self):
+        self.pdf_file_list.scan_files()
+        self.assertEqual(len(self.pdf_file_list.file_names), 3)
+        self.assertEqual(len(self.pdf_file_list.total_characters), 3)
+        self.assertEqual(len(self.pdf_file_list.total_bad_characters), 3)
+        self.assertEqual(len(self.pdf_file_list.percentage_bad_characters), 3)
+
+    def test_generate_dataframe(self):
+        self.pdf_file_list.scan_files()
+        self.assertIsInstance(self.pdf_file_list.generate_dataframe(), pd.DataFrame)
+
+
 class TestScriptFunctions(unittest.TestCase):
 
     def setUp(self) -> None:
         self.path = os.path.join(os.getcwd(), 'test_dir')
-        self.file_list = ['one.txt',
-                          'two.txt',
-                          'three.txt',
-                          'bad_files.txt']
-        self.logger = logging.getLogger('test_logger')
 
-    def test_file_list(self):
-        file_list = inspector.get_file_list(self.path)
-        self.assertIsInstance(file_list, tuple)
-        for file in file_list[0]:
-            self.assertIn(file, self.file_list)
-        self.assertEqual(file_list[1], self.path)
-
-    def test_scan_files(self):
-        inspector.instantiate_logger(self.path)
-        inspector.scan_files(self.file_list, self.path, False)
-        file_list = inspector.get_file_list(self.path)
-        self.assertIn('bad_files.txt', file_list[0])
+    def test_get_path(self):
+        path = inspector.get_path(self.path)
+        self.assertTrue(os.path.isdir(path))
 
 
 if __name__ == '__main__':

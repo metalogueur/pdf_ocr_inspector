@@ -3,7 +3,7 @@
 This one-off script is used to scan through a directory's .pdf files and search for bad OCR 
 in these files.
 
-All bad files are then listed in a log file.
+All files and a few metrics are then listed in a log file.
 
 ## Installation
 Python 3.8 and over is required to run this script. It has not been tested with older
@@ -22,7 +22,7 @@ this output:
 
 ```
 $ python inspector.py -V
-> PDF OCR Inspector version 0.1
+> PDF OCR Inspector version 0.2
 ```
 
 ## Usage
@@ -33,14 +33,16 @@ window inside the `pdf_ocr_inspector/` directory:
 `$ python inspector.py path_to_directory [-v]`
 
 - `path_to_directory` must be a valid path enclosed in quotes;
-- `-v` is an optional parameter to increase verbosity in the Terminal output and
-the log file.
+- `-v` is an optional parameter to increase verbosity in the Terminal output.
 
-The script will go through each .pdf file, extracting text from the first few pages, and
-will look for a particular pattern in the text. If that pattern shows up, the .pdf file
-will be flagged as bad and its name will be logged in the `bad_files.txt` log stored in
-`path_to_directory`.
+The script will go through each .pdf file, extracting text and will look for a particular pattern in the text. 
+That pattern is considered as characters being "badly encoded". Metrics will be built with the files' OCR text:
+
+- the total of characters;
+- the total of bad characters;
+- the percentage of bad characters.
+
+At the end of the script, an Excel file is created containing all these metrics.
 
 ## To-do list:
-- Add concurrency to speed up the scanning process;
-- Publish to PyPI.
+- Add concurrency to speed up the scanning process.

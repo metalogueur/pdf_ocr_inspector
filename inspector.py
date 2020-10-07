@@ -26,19 +26,17 @@
 
 # Imports
 import argparse
-import logging
 import os
+import pandas as pd
 import re
 from pdfminer.high_level import extract_text
 from progress.bar import Bar
 
 # Globals
-BAD_OCR_LOG_FILE_NAME = 'bad_files.txt'
+BAD_OCR_LOG_FILE_NAME = 'bad_ocr.xlsx'
 BAD_OCR_PATTERN = r'\(cid\:[0-9]+\)'
 SCRIPT_NAME = 'PDF OCR Inspector'
-SCRIPT_VERSION = 0.1
-
-bad_ocr_logger = logging.getLogger('bad_ocr_files')
+SCRIPT_VERSION = 0.2
 
 
 # Classes
@@ -48,6 +46,13 @@ class InspectorParser(argparse.ArgumentParser):
     parser_description = "Scans through a directory's files looking for bad OCR."
 
     def __init__(self, script_name: str, script_version: float):
+        """Class constructor
+
+        :param script_name:     The name of this script
+        :type script_name:      str
+        :param script_version:  The version of this script
+        :type script_version:   float
+        """
         if not isinstance(script_name, str):
             raise TypeError("script_name must be a string.")
         if not isinstance(script_version, float):
@@ -56,13 +61,101 @@ class InspectorParser(argparse.ArgumentParser):
         super(InspectorParser, self).__init__(description=self.parser_description)
         self.script_name = script_name
         self.script_version = script_version
+        self.add_all_arguments()
 
     def add_all_arguments(self):
         """Adds all parser arguments in one call."""
         self.add_argument('-V', '--version', help='show script version and exit', action='version',
                           version=f"{self.script_name} version {self.script_version}")
-        self.add_argument('path_to_dir', help='a valid directory path', type=get_file_list)
+        self.add_argument('path_to_dir', help='a valid directory path', type=get_path)
         self.add_argument('-v', '--verbose', help='increase output verbosity', action='store_true')
+
+
+class PDFFileList:
+    """List of a directory's .pdf files and their statistics concerning OCR quality."""
+
+    def __init__(self, path_to_dir: str, verbose: bool = False):
+        """Class constructor
+
+        :param path_to_dir:     The directory path string
+        :type path_to_dir:      str
+        :param verbose:         The verbose flag for the command line
+        :type verbose:          bool
+        """
+
+        if not isinstance(path_to_dir, str):
+            raise TypeError("path_to_dir must be a string.")
+        if not isinstance(verbose, bool):
+            raise TypeError("verbose must be a boolean.")
+        if not os.path.isdir(path_to_dir):
+            raise FileNotFoundError("path_to_dir must be a valid path.")
+
+        self.file_names = []
+        self.total_characters = []
+        self.total_bad_characters = []
+        self.percentage_bad_characters = []
+        self.directory = path_to_dir
+        self.verbose = verbose
+        self.get_pdf_files()
+
+    def get_pdf_files(self) -> None:
+        """ Retrieves all pdf files contained in self.directory and populates self.file_names with the file names. """
+
+        file_list = os.listdir(self.directory)
+        for file in file_list:
+            path_to_file = os.path.join(self.directory, file)
+            if os.path.isfile(path_to_file) and file.endswith('.pdf'):
+                self.file_names.append(path_to_file)
+
+    def scan_files(self) -> None:
+        """ Scans all pdf files contained in self.file_names in search of bad OCR and fills the different
+        statistics lists: self.total_characters, self.total_bad_characters and self.percentage_bad_characters.
+        """
+        if self.file_names:
+            if self.verbose:
+                print(f"Scanning files in {self.directory}...")
+
+            bar = Bar('Scanning', max=len(self.file_names))
+
+            for file in self.file_names:
+                text = extract_text(file)
+                self.total_characters.append(len(text))
+                stripped_text = re.subn(BAD_OCR_PATTERN, '', text)
+                self.total_bad_characters.append(stripped_text[1])
+                self.percentage_bad_characters.append((1 - (len(stripped_text[0]) / len(text))) * 100)
+                bar.next()
+
+            bar.finish()
+        else:
+            if self.verbose:
+                print("No .pdf file to scan.")
+
+    def generate_dataframe(self) -> pd.DataFrame:
+        """Generates a Pandas DataFrame from the statistics lists and returns it
+        :returns:   A DataFrame containing all bad OCR statistics.
+        :rtype:     pd.DataFrame
+        """
+        if self.verbose:
+            print("Generating DataFrame...")
+
+        data = {
+            'file_names': self.file_names,
+            'total_characters': self.total_characters,
+            'total_bad_characters': self.total_bad_characters,
+            'percentage_bad_characters': self.percentage_bad_characters
+        }
+        return pd.DataFrame(data)
+
+    def generate_excel_report(self) -> None:
+        """Generates an Excel file from a Pandas DataFrame."""
+
+        df = self.generate_dataframe()
+        excel_file = os.path.join(self.directory, BAD_OCR_LOG_FILE_NAME)
+
+        if self.verbose:
+            print(f"Generating Excel file in {self.directory}...")
+
+        df.to_excel(excel_file, index=False)
 
 
 # Script functions
@@ -70,16 +163,16 @@ def main():
     """The main function of the script."""
 
     parser = InspectorParser(SCRIPT_NAME, SCRIPT_VERSION)
-    parser.add_all_arguments()
 
     try:
         args = parser.parse_args()
-        instantiate_logger(args.path_to_dir[1])
 
         if args.verbose:
             print("Starting script...")
 
-        scan_files(args.path_to_dir[0], args.path_to_dir[1], args.verbose)
+        pdf_list = PDFFileList(args.path_to_dir, args.verbose)
+        pdf_list.scan_files()
+        pdf_list.generate_excel_report()
 
         if args.verbose:
             print("End of script.")
@@ -92,77 +185,20 @@ def main():
         return
 
 
-def get_file_list(path_to_dir: str) -> tuple:
-    """Returns the contents of a directory as a list. Raises an error otherwise.
+def get_path(path_to_dir: str) -> str:
+    """Returns the directory path string if it is a valid path. Raises an error otherwise.
 
         :param path_to_dir: A valid path to a directory.
         :type path_to_dir: str
-        :returns: a tuple containing the file list and the path string
-        :rtype: tuple
+        :returns: the directory path string
+        :rtype: str
         """
     if not isinstance(path_to_dir, str):
         raise TypeError("path_to_dir must be a string.")
     if not os.path.isdir(path_to_dir):
         raise FileNotFoundError("path_to_dir must be a valid path.")
 
-    return os.listdir(path_to_dir), path_to_dir
-
-
-def instantiate_logger(path_to_log_file_dir: str) -> None:
-    """Creates a Logger instance, a log file and returns the Logger instance.
-
-    :param path_to_log_file_dir: A valid path to a directory
-    :type path_to_log_file_dir: str
-    :returns: None
-    :rtype: NoneType
-    """
-    if not isinstance(path_to_log_file_dir, str):
-        raise TypeError("path_to_log_file must be a string.")
-    if not os.path.isdir(path_to_log_file_dir):
-        raise FileNotFoundError("path_to_log_file_dir must be a valid path.")
-
-    formatter = logging.Formatter('[%(levelname)s] %(message)s')
-    log_file = logging.FileHandler(os.path.join(path_to_log_file_dir, BAD_OCR_LOG_FILE_NAME), encoding='utf-8')
-    log_file.setFormatter(formatter)
-    bad_ocr_logger.addHandler(log_file)
-    bad_ocr_logger.setLevel('INFO')
-
-
-def scan_files(file_list: list, path_to_dir: str, verbose: bool) -> None:
-    """Extracts text from all pdf files and searches for bad OCR.
-
-    :param file_list: The list of all files and directories in a single directory.
-    :type file_list: list
-    :param path_to_dir: The path to the directory.
-    :type path_to_dir: str
-    :param verbose: The verbose flag received from the command line prompt.
-    :type verbose: bool
-    :returns: None
-    :rtype: NoneType
-    """
-    if not isinstance(file_list, list):
-        raise TypeError("file_list must be a list.")
-    if not isinstance(path_to_dir, str):
-        raise TypeError("path_to_dir must be a string.")
-    if verbose:
-        bad_ocr_logger.info(f"Scanning files in {path_to_dir}...")
-
-    bar = Bar('Scanning', max=len(file_list))
-
-    for file in file_list:
-        path_to_file = os.path.join(path_to_dir, file)
-        if os.path.isfile(path_to_file) and file.endswith('.pdf'):
-            text = extract_text(path_to_file, maxpages=2)
-            if re.search(BAD_OCR_PATTERN, text):
-                bad_ocr_logger.warning(f"bad file: {file}")
-            elif verbose:
-                bad_ocr_logger.info(f"good file: {file}")
-        bar.next()
-
-    bar.finish()
-
-    if verbose:
-        print(f"Bad OCR file list written in {os.path.join(path_to_dir, BAD_OCR_LOG_FILE_NAME)}")
+    return path_to_dir
 
 
 if __name__ == '__main__':
