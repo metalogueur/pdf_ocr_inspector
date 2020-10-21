@@ -12,13 +12,13 @@ class TestInspectorParser(unittest.TestCase):
 
     def setUp(self) -> None:
         self.script_name = 'Roger'
-        self.script_version = 0.42
+        self.script_version = '0.42'
         self.parser = inspector.InspectorParser(self.script_name, self.script_version)
 
     def test_parser_instance(self):
         self.assertIsInstance(self.parser, inspector.InspectorParser)
         self.assertIsInstance(self.parser.script_name, str)
-        self.assertIsInstance(self.parser.script_version, float)
+        self.assertIsInstance(self.parser.script_version, str)
         self.assertEqual(self.parser.script_name, self.script_name)
         self.assertEqual(self.parser.script_version, self.script_version)
 

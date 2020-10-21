@@ -26,6 +26,7 @@
 
 # Imports
 import argparse
+import numpy as np
 import os
 import pandas as pd
 import re
@@ -36,7 +37,7 @@ from progress.bar import Bar
 BAD_OCR_LOG_FILE_NAME = 'bad_ocr.xlsx'
 BAD_OCR_PATTERN = r'\(cid\:[0-9]+\)'
 SCRIPT_NAME = 'PDF OCR Inspector'
-SCRIPT_VERSION = 0.2
+SCRIPT_VERSION = '0.2.1'
 
 
 # Classes
@@ -45,18 +46,18 @@ class InspectorParser(argparse.ArgumentParser):
 
     parser_description = "Scans through a directory's files looking for bad OCR."
 
-    def __init__(self, script_name: str, script_version: float):
+    def __init__(self, script_name: str, script_version: str):
         """Class constructor
 
         :param script_name:     The name of this script
         :type script_name:      str
         :param script_version:  The version of this script
-        :type script_version:   float
+        :type script_version:   str
         """
         if not isinstance(script_name, str):
             raise TypeError("script_name must be a string.")
-        if not isinstance(script_version, float):
-            raise TypeError("script_version must be a float.")
+        if not isinstance(script_version, str):
+            raise TypeError("script_version must be a string.")
 
         super(InspectorParser, self).__init__(description=self.parser_description)
         self.script_name = script_name
@@ -118,12 +119,28 @@ class PDFFileList:
             bar = Bar('Scanning', max=len(self.file_names))
 
             for file in self.file_names:
-                text = extract_text(file)
-                self.total_characters.append(len(text))
-                stripped_text = re.subn(BAD_OCR_PATTERN, '', text)
-                self.total_bad_characters.append(stripped_text[1])
-                self.percentage_bad_characters.append((1 - (len(stripped_text[0]) / len(text))) * 100)
-                bar.next()
+                try:
+                    text = extract_text(file)
+                except RecursionError:
+                    print(f" {file} scanning has failed due to a RecursionError. Continuing with next file...")
+                    # TODO : convert the three appends into a single method
+                    self.total_characters.append(np.nan)
+                    self.total_bad_characters.append(np.nan)
+                    self.percentage_bad_characters.append(np.nan)
+                    continue
+                except Exception as erreur:
+                    # TODO : create log file with Traceback here
+                    print(f" {file} scanning has failed due to '{erreur}'. Continuing with next file...")
+                    self.total_characters.append(np.nan)
+                    self.total_bad_characters.append(np.nan)
+                    self.percentage_bad_characters.append(np.nan)
+                    continue
+                else:
+                    self.total_characters.append(len(text))
+                    stripped_text = re.subn(BAD_OCR_PATTERN, '', text)
+                    self.total_bad_characters.append(stripped_text[1])
+                    self.percentage_bad_characters.append((1 - (len(stripped_text[0]) / len(text))) * 100)
+                    bar.next()
 
             bar.finish()
         else:

@@ -22,7 +22,7 @@ this output:
 
 ```
 $ python inspector.py -V
-> PDF OCR Inspector version 0.2
+> PDF OCR Inspector version 0.2.1
 ```
 
 ## Usage
