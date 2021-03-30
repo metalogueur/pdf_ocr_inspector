@@ -1,6 +1,6 @@
 # inspector.py
 #
-# Copyright (C) 2020 Benoit Hamel, Bibliothèque, HEC Montréal
+# Copyright (C) 2020-2021 Benoit Hamel, Bibliothèque, HEC Montréal
 #
 # MIT License
 #
@@ -26,6 +26,7 @@
 
 # Imports
 import argparse
+import logging
 import numpy as np
 import os
 import pandas as pd
@@ -34,10 +35,10 @@ from pdfminer.high_level import extract_text
 from progress.bar import Bar
 
 # Globals
-BAD_OCR_LOG_FILE_NAME = 'bad_ocr.xlsx'
+BAD_OCR_REPORT_FILE_NAME = 'bad_ocr.xlsx'
 BAD_OCR_PATTERN = r'\(cid\:[0-9]+\)'
 SCRIPT_NAME = 'PDF OCR Inspector'
-SCRIPT_VERSION = '0.2.1'
+SCRIPT_VERSION = '0.3'
 
 
 # Classes
@@ -97,6 +98,7 @@ class PDFFileList:
         self.percentage_bad_characters = []
         self.directory = path_to_dir
         self.verbose = verbose
+        self.logger = set_logger(path_to_dir)
         self.get_pdf_files()
 
     def get_pdf_files(self) -> None:
@@ -121,31 +123,38 @@ class PDFFileList:
             for file in self.file_names:
                 try:
                     text = extract_text(file)
-                except RecursionError:
-                    print(f" {file} scanning has failed due to a RecursionError. Continuing with next file...")
-                    # TODO : convert the three appends into a single method
-                    self.total_characters.append(np.nan)
-                    self.total_bad_characters.append(np.nan)
-                    self.percentage_bad_characters.append(np.nan)
+                    stripped_text = re.subn(BAD_OCR_PATTERN, '', text)
+                    percentage_bad_chars = (1 - (len(stripped_text[0]) / len(text))) * 100
+                    self.update_file_metrics(len(text), stripped_text[1],
+                                             percentage_bad_chars)
+                except (RecursionError, ZeroDivisionError) as e:
+                    logging.error(f"{file} scanning has failed due to '{e}'.")
+                    self.update_file_metrics(np.nan, np.nan, np.nan)
                     continue
-                except Exception as erreur:
-                    # TODO : create log file with Traceback here
-                    print(f" {file} scanning has failed due to '{erreur}'. Continuing with next file...")
-                    self.total_characters.append(np.nan)
-                    self.total_bad_characters.append(np.nan)
-                    self.percentage_bad_characters.append(np.nan)
+                except Exception as e:
+                    logging.error(f"{file} scanning has failed due to '{e}'.")
+                    self.update_file_metrics(np.nan, np.nan, np.nan)
                     continue
                 else:
-                    self.total_characters.append(len(text))
-                    stripped_text = re.subn(BAD_OCR_PATTERN, '', text)
-                    self.total_bad_characters.append(stripped_text[1])
-                    self.percentage_bad_characters.append((1 - (len(stripped_text[0]) / len(text))) * 100)
                     bar.next()
 
             bar.finish()
         else:
             if self.verbose:
                 print("No .pdf file to scan.")
+
+    def update_file_metrics(self, total_chars, bad_chars, percentage) -> None:
+        """
+        Updates total_characters, total_bad_characters and percentage_bad_characters lists with file metrics
+        after a given file has been scanned.
+
+        :param total_chars: The length of the text
+        :param bad_chars: The numbers of bad character occurences in the text
+        :param percentage: The proportion of bad characters in the text.
+        """
+        self.total_characters.append(total_chars)
+        self.total_bad_characters.append(bad_chars)
+        self.percentage_bad_characters.append(percentage)
 
     def generate_dataframe(self) -> pd.DataFrame:
         """Generates a Pandas DataFrame from the statistics lists and returns it
@@ -167,7 +176,7 @@ class PDFFileList:
         """Generates an Excel file from a Pandas DataFrame."""
 
         df = self.generate_dataframe()
-        excel_file = os.path.join(self.directory, BAD_OCR_LOG_FILE_NAME)
+        excel_file = os.path.join(self.directory, BAD_OCR_REPORT_FILE_NAME)
 
         if self.verbose:
             print(f"Generating Excel file in {self.directory}...")
@@ -192,7 +201,7 @@ def main():
         pdf_list.generate_excel_report()
 
         if args.verbose:
-            print("End of script.")
+            print("End of script. Please check file_errors.log for missing files in the bad_ocr.xlsx report.")
 
     except (FileNotFoundError, TypeError) as erreur:
         print(erreur.strerror)
@@ -218,5 +227,25 @@ def get_path(path_to_dir: str) -> str:
     return path_to_dir
 
 
+def set_logger(path_to_dir: str) -> logging.Logger:
+    """
+    Defines a logger that will serve to identify files that encountered errors during scanning.
+    :param path_to_dir: The path where le log file will be saved
+    :type path_to_dir:  str
+    :return:            The logger instance
+    """
+    if not isinstance(path_to_dir, str):
+        raise TypeError("path_to_dir must be a valid string.")
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.ERROR)
+    handler = logging.FileHandler(os.path.join(path_to_dir, 'file_errors.log'), 'w', encoding='utf-8')
+    formatter = logging.Formatter("%(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
+
+
 if __name__ == '__main__':
+
     main()

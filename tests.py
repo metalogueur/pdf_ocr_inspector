@@ -23,6 +23,7 @@ class TestInspectorParser(unittest.TestCase):
         self.assertEqual(self.parser.script_version, self.script_version)
 
 
+# TODO: create tests for set_logger function and update_file_metrics method.
 class TestPDFFileList(unittest.TestCase):
 
     def setUp(self) -> None:

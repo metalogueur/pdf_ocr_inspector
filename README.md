@@ -22,7 +22,7 @@ this output:
 
 ```
 $ python inspector.py -V
-> PDF OCR Inspector version 0.2.1
+> PDF OCR Inspector version 0.3
 ```
 
 ## Usage
@@ -42,7 +42,9 @@ That pattern is considered as characters being "badly encoded". Metrics will be 
 - the total of bad characters;
 - the percentage of bad characters.
 
-At the end of the script, an Excel file is created containing all these metrics.
+At the end of the script, an Excel file is created containing all these metrics. A log file is also created to list
+all files for which scanning has failed.
 
 ## To-do list:
-- Add concurrency to speed up the scanning process.
+- Add concurrency to speed up the scanning process;
+- Create a logger to list all errors encountered in files.
